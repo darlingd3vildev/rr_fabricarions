@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "249525992953",
+    "project_id": "rr-fabrication-456eb",
+    "storage_bucket": "rr-fabrication-456eb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:249525992953:android:954c5d37a68e0647521128",
+        "android_client_info": {
+          "package_name": "com.example.rr_fabrication"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "249525992953-sieldplsaih7b6jf4vhmvml7kiivmf92.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB-BJ5Pwfr2iSa4od0o4oK2LQG4MmE8sU8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "249525992953-sieldplsaih7b6jf4vhmvml7kiivmf92.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "249525992953-pe2940ug2g2qjcuo5qn1q71qiudroqh7.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.rrFabrication"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
