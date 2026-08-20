@@ -1,0 +1,17 @@
+rules_version = '2';
+
+// Craft rules based on data in your Firestore database
+// allow write: if firestore.get(
+//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /products/{allPaths=**} {
+      // Allow read access to all authenticated users
+      allow read: if request.auth != null;
+      // Allow upload/write access to authenticated users
+      allow write: if request.auth != null
+                   && request.resource.size < 10 * 1024 * 1024 // Max 10MB
+                   && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

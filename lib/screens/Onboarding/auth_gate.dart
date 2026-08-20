@@ -1,10 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:rr_fabrication/screens/user_info_screen.dart';
-import 'package:rr_fabrication/screens/user_role.dart';
-import 'package:rr_fabrication/screens/worker_home_screen.dart';
-import 'home_screen.dart';
+import 'package:rr_fabrication/models/user_role.dart';
+import 'package:rr_fabrication/screens/customer/home_screen.dart';
+import 'package:rr_fabrication/screens/worker/worker_home_screen.dart';
 import 'login_screen.dart';
 
 class AuthGate extends StatelessWidget {
@@ -35,18 +34,18 @@ class AuthGate extends StatelessWidget {
               }
 
               if (userDocSnapshot.hasError || !userDocSnapshot.data!.exists) {
-                // If user doc doesn't exist, they might be a new user
-                // who hasn't completed the info screen.
-                return const UserInfoScreen();
+                // If user doc doesn't exist yet, default directly to Customer home screen
+                return const HomePage(userRole: UserRole.CUSTOMER);
               }
 
               // We have the user document, let's check the role.
               final userData =
-                  userDocSnapshot.data!.data() as Map<String, dynamic>;
-              final roleString = userData['role'] as String;
+                  userDocSnapshot.data!.data() as Map<String, dynamic>? ?? {};
+              final roleString = userData['role'] as String? ?? 'CUSTOMER';
               final userRole = UserRole.values.firstWhere(
-                  (e) => e.name == roleString,
-                  orElse: () => UserRole.CUSTOMER); // Default to CUSTOMER if role not found
+                (e) => e.name == roleString,
+                orElse: () => UserRole.CUSTOMER,
+              );
 
               return _buildScreenForRole(userRole);
             },
@@ -64,8 +63,8 @@ Widget _buildScreenForRole(UserRole role) {
   switch (role) {
     case UserRole.WORKER:
       return WorkerHomeScreen(userRole: role);
-    case UserRole.ADMIN: // Admins might default to HomePage but can switch
+    case UserRole.ADMIN:
     case UserRole.CUSTOMER:
-    return HomePage(userRole: role);
+      return HomePage(userRole: role);
   }
 }

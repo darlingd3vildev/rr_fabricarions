@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'home_screen.dart';
-import 'login_screen.dart';
-import 'user_role.dart';
+import '../customer/home_screen.dart';
+import '../Onboarding/login_screen.dart';
+import '../../models/user_role.dart';
 
 class MyWorkScreen extends StatelessWidget {
   final UserRole userRole;
