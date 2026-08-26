@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:rr_fabrication/models/product_model.dart';
 import 'package:rr_fabrication/models/stage_model.dart';
 import 'package:rr_fabrication/screens/admin/admin_drawer.dart';
+import 'package:rr_fabrication/screens/admin/product_detail_screen.dart';
 import 'package:rr_fabrication/services/product_service.dart';
 import 'package:rr_fabrication/services/stage_service.dart';
 import 'package:rr_fabrication/services/storage_service.dart';
@@ -29,8 +30,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
         TextEditingController(text: isEditing ? existingProduct.name : '');
     final descriptionController =
         TextEditingController(text: isEditing ? existingProduct.description : '');
-    final imageUrlController =
-        TextEditingController(text: isEditing ? (existingProduct.imageUrl ?? '') : '');
     final formKey = GlobalKey<FormState>();
     final messenger = ScaffoldMessenger.of(context);
 
@@ -39,9 +38,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
       isEditing ? existingProduct.stageIds : <String>[],
     );
 
-    XFile? pickedImageFile;
-    Uint8List? localImageBytes;
-    bool showUrlField = false;
+    final List<String> currentImageUrls = List<String>.from(
+      isEditing ? existingProduct.imageUrls : <String>[],
+    );
+    final List<XFile> newPickedFiles = [];
+    final List<Uint8List> newPickedBytes = [];
+    final urlInputController = TextEditingController();
 
     showDialog(
       context: context,
@@ -51,17 +53,25 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
         return StatefulBuilder(
           builder: (builderContext, setDialogState) {
-            Future<void> pickImage(ImageSource source) async {
+            Future<void> pickPhotos(ImageSource source) async {
               try {
-                final file = source == ImageSource.camera
-                    ? await _storageService.pickImageFromCamera()
-                    : await _storageService.pickImageFromGallery();
-                if (file != null) {
-                  final bytes = await file.readAsBytes();
-                  setDialogState(() {
-                    pickedImageFile = file;
-                    localImageBytes = bytes;
-                  });
+                if (source == ImageSource.camera) {
+                  final file = await _storageService.pickImageFromCamera();
+                  if (file != null) {
+                    final bytes = await file.readAsBytes();
+                    setDialogState(() {
+                      newPickedFiles.add(file);
+                      newPickedBytes.add(bytes);
+                    });
+                  }
+                } else {
+                  final files = await _storageService.pickMultipleImagesFromGallery();
+                  for (final f in files) {
+                    final b = await f.readAsBytes();
+                    newPickedFiles.add(f);
+                    newPickedBytes.add(b);
+                  }
+                  setDialogState(() {});
                 }
               } catch (e) {
                 messenger.showSnackBar(
@@ -73,54 +83,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 );
               }
             }
-
-            void showPhotoSourceSheet() {
-              showModalBottomSheet(
-                context: dialogContext,
-                shape: const RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                builder: (sheetContext) {
-                  return SafeArea(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.all(16.0),
-                          child: Text(
-                            'Select Product Photo',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.camera_alt_outlined),
-                          title: const Text('Take Photo with Camera'),
-                          onTap: () {
-                            Navigator.pop(sheetContext);
-                            pickImage(ImageSource.camera);
-                          },
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.photo_library_outlined),
-                          title: const Text('Choose from Gallery'),
-                          onTap: () {
-                            Navigator.pop(sheetContext);
-                            pickImage(ImageSource.gallery);
-                          },
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              );
-            }
-
-            final bool hasPhoto = localImageBytes != null ||
-                imageUrlController.text.trim().isNotEmpty;
 
             return AlertDialog(
               shape: RoundedRectangleBorder(
@@ -137,7 +99,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 ],
               ),
               content: SizedBox(
-                width: 480,
+                width: 500,
                 child: Form(
                   key: formKey,
                   child: SingleChildScrollView(
@@ -183,194 +145,178 @@ class _ProductsScreenState extends State<ProductsScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 20),
 
-                        // PRODUCT PHOTO SECTION (Camera / Gallery / URL)
-                        const Text(
-                          'Product Photo',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
+                        // PRODUCT PHOTOS SECTION
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Product Images',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            Text(
+                              '${currentImageUrls.length + newPickedBytes.length} added',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
 
-                        if (hasPhoto)
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.grey[300]!),
-                            ),
-                            child: Column(
+                        // Image Preview Strip
+                        if (currentImageUrls.isNotEmpty || newPickedBytes.isNotEmpty)
+                          SizedBox(
+                            height: 80,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
                               children: [
-                                ClipRRect(
-                                  borderRadius: const BorderRadius.vertical(
-                                    top: Radius.circular(11),
-                                  ),
-                                  child: localImageBytes != null
-                                      ? Image.memory(
-                                          localImageBytes!,
-                                          height: 140,
-                                          width: double.infinity,
-                                          fit: BoxFit.cover,
-                                        )
-                                      : Image.network(
-                                          imageUrlController.text.trim(),
-                                          height: 140,
-                                          width: double.infinity,
-                                          fit: BoxFit.cover,
-                                          errorBuilder:
-                                              (context, error, stackTrace) =>
-                                                  Container(
-                                            height: 140,
-                                            color: Colors.grey[200],
-                                            child: const Center(
-                                              child: Text(
-                                                'Failed to load image',
-                                                style: TextStyle(
-                                                    color: Colors.red),
-                                              ),
-                                            ),
+                                ...currentImageUrls.map((url) {
+                                  return Stack(
+                                    children: [
+                                      Container(
+                                        width: 80,
+                                        height: 80,
+                                        margin: const EdgeInsets.only(right: 8),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: Colors.grey[300]!),
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Image.network(
+                                            url,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (c, e, s) =>
+                                                const Icon(Icons.broken_image),
                                           ),
                                         ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 6),
-                                  color: Colors.grey[100],
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      TextButton.icon(
-                                        onPressed: showPhotoSourceSheet,
-                                        icon: const Icon(Icons.swap_horiz,
-                                            size: 16),
-                                        label: const Text('Change Photo'),
                                       ),
-                                      TextButton.icon(
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: Colors.red[600],
+                                      Positioned(
+                                        top: 2,
+                                        right: 10,
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            setDialogState(() {
+                                              currentImageUrls.remove(url);
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.all(2),
+                                            decoration: const BoxDecoration(
+                                              color: Colors.red,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(Icons.close,
+                                                size: 14, color: Colors.white),
+                                          ),
                                         ),
-                                        onPressed: () {
-                                          setDialogState(() {
-                                            pickedImageFile = null;
-                                            localImageBytes = null;
-                                            imageUrlController.clear();
-                                          });
-                                        },
-                                        icon: const Icon(Icons.delete_outline,
-                                            size: 16),
-                                        label: const Text('Remove'),
                                       ),
                                     ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        else
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .primary
-                                  .withValues(alpha: 0.04),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.25),
-                              ),
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: OutlinedButton.icon(
-                                        style: OutlinedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 12),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(10),
+                                  );
+                                }),
+                                ...newPickedBytes.asMap().entries.map((entry) {
+                                  final idx = entry.key;
+                                  final bytes = entry.value;
+                                  return Stack(
+                                    children: [
+                                      Container(
+                                        width: 80,
+                                        height: 80,
+                                        margin: const EdgeInsets.only(right: 8),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: Colors.green[400]!),
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Image.memory(bytes, fit: BoxFit.cover),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: 2,
+                                        right: 10,
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            setDialogState(() {
+                                              newPickedBytes.removeAt(idx);
+                                              newPickedFiles.removeAt(idx);
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.all(2),
+                                            decoration: const BoxDecoration(
+                                              color: Colors.red,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(Icons.close,
+                                                size: 14, color: Colors.white),
                                           ),
                                         ),
-                                        onPressed: () =>
-                                            pickImage(ImageSource.camera),
-                                        icon: const Icon(
-                                            Icons.camera_alt_outlined),
-                                        label: const Text('Take Photo'),
                                       ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: OutlinedButton.icon(
-                                        style: OutlinedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 12),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(10),
-                                          ),
-                                        ),
-                                        onPressed: () =>
-                                            pickImage(ImageSource.gallery),
-                                        icon: const Icon(
-                                            Icons.photo_library_outlined),
-                                        label: const Text('Gallery'),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                GestureDetector(
-                                  onTap: () {
-                                    setDialogState(() {
-                                      showUrlField = !showUrlField;
-                                    });
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(4.0),
-                                    child: Text(
-                                      showUrlField
-                                          ? 'Hide URL input'
-                                          : 'Or enter photo URL directly',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                        decoration:
-                                            TextDecoration.underline,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                if (showUrlField) ...[
-                                  const SizedBox(height: 8),
-                                  TextFormField(
-                                    controller: imageUrlController,
-                                    decoration: InputDecoration(
-                                      labelText: 'Image Web URL',
-                                      hintText: 'https://example.com/photo.jpg',
-                                      prefixIcon:
-                                          const Icon(Icons.link_outlined),
-                                      isDense: true,
-                                      border: OutlineInputBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                    onChanged: (_) => setDialogState(() {}),
-                                  ),
-                                ],
+                                    ],
+                                  );
+                                }),
                               ],
                             ),
                           ),
+
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => pickPhotos(ImageSource.camera),
+                                icon: const Icon(Icons.camera_alt_outlined, size: 16),
+                                label: const Text('Camera'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => pickPhotos(ImageSource.gallery),
+                                icon: const Icon(Icons.photo_library_outlined, size: 16),
+                                label: const Text('Gallery'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: urlInputController,
+                                decoration: InputDecoration(
+                                  hintText: 'Or enter image URL...',
+                                  isDense: true,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            IconButton.filledTonal(
+                              onPressed: () {
+                                final text = urlInputController.text.trim();
+                                if (text.isNotEmpty) {
+                                  setDialogState(() {
+                                    currentImageUrls.add(text);
+                                    urlInputController.clear();
+                                  });
+                                }
+                              },
+                              icon: const Icon(Icons.add, size: 18),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 20),
 
                         // Required Stages section
@@ -535,29 +481,19 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           });
 
                           try {
-                            String? finalImageUrl =
-                                imageUrlController.text.trim().isNotEmpty
-                                    ? imageUrlController.text.trim()
-                                    : null;
-
-                            // If a new local image was picked from camera/gallery, upload to Firebase Storage
-                            if (pickedImageFile != null) {
-                              try {
-                                final uploadedUrl = await _storageService
-                                    .uploadProductImage(pickedImageFile!);
-                                finalImageUrl = uploadedUrl;
-                              } catch (uploadError) {
-                                debugPrint(
-                                    'Storage upload failed (will continue with existing/empty URL): $uploadError');
-                              }
-                            }
+                            final uploadedUrls = await _storageService
+                                .uploadMultipleProductImages(newPickedFiles);
+                            final allFinalUrls = [
+                              ...currentImageUrls,
+                              ...uploadedUrls,
+                            ];
 
                             if (isEditing) {
                               await _productService.updateProduct(
                                 id: existingProduct.id,
                                 name: nameController.text,
                                 description: descriptionController.text,
-                                imageUrl: finalImageUrl,
+                                imageUrls: allFinalUrls,
                                 stageIds: selectedStageIds,
                               );
                               messenger.showSnackBar(
@@ -571,7 +507,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                               await _productService.addProduct(
                                 name: nameController.text,
                                 description: descriptionController.text,
-                                imageUrl: finalImageUrl,
+                                imageUrls: allFinalUrls,
                                 stageIds: selectedStageIds,
                               );
                               messenger.showSnackBar(
@@ -612,287 +548,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       : Icon(isEditing ? Icons.save : Icons.add),
                   label: Text(
                     isSubmitting
-                        ? 'Uploading & Saving...'
+                        ? 'Saving Product...'
                         : (isEditing ? 'Save Changes' : 'Create Product'),
                   ),
                 ),
               ],
             );
           },
-        );
-      },
-    );
-  }
-
-  void _confirmDeleteProduct(ProductModel product) {
-    final messenger = ScaffoldMessenger.of(context);
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        bool isDeleting = false;
-
-        return StatefulBuilder(
-          builder: (builderContext, setDialogState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              title: const Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text('Delete Product'),
-                ],
-              ),
-              content: Text(
-                'Are you sure you want to delete "${product.name}"?\nThis action cannot be undone.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isDeleting
-                      ? null
-                      : () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: isDeleting
-                      ? null
-                      : () async {
-                          setDialogState(() {
-                            isDeleting = true;
-                          });
-
-                          try {
-                            await _productService.deleteProduct(product.id);
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content:
-                                    Text('Product "${product.name}" deleted'),
-                                backgroundColor: Colors.red[700],
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                            if (dialogContext.mounted) {
-                              Navigator.of(dialogContext).pop();
-                            }
-                          } catch (e) {
-                            if (dialogContext.mounted) {
-                              setDialogState(() {
-                                isDeleting = false;
-                              });
-                            }
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text('Failed to delete product: $e'),
-                                backgroundColor: Colors.red,
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        },
-                  icon: isDeleting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.delete_forever),
-                  label: Text(isDeleting ? 'Deleting...' : 'Delete'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }  void _showFullImageDialog(BuildContext context, String imageUrl, String title) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.of(dialogContext).pop(),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        imageUrl,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          height: 200,
-                          color: Colors.grey[200],
-                          child: const Center(
-                            child: Text(
-                              'Failed to load image',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showProductOptionsModal({
-    required BuildContext context,
-    required ProductModel product,
-    required List<StageModel> availableStages,
-  }) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                ListTile(
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withValues(alpha: 0.1),
-                      child: product.imageUrl != null &&
-                              product.imageUrl!.isNotEmpty
-                          ? Image.network(
-                              product.imageUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (c, e, s) => Icon(
-                                Icons.inventory_2_outlined,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                            )
-                          : Icon(
-                              Icons.inventory_2_outlined,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                    ),
-                  ),
-                  title: Text(
-                    product.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'What would you like to do with this product?',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                ),
-                const Divider(),
-                ListTile(
-                  leading: Icon(
-                    Icons.edit_note,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  title: const Text(
-                    'Edit Product Details & Stages',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: const Text('Update name, description, photo, or stages'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _showAddOrEditProductDialog(
-                      existingProduct: product,
-                      availableStages: availableStages,
-                    );
-                  },
-                ),
-                if (product.imageUrl != null && product.imageUrl!.isNotEmpty)
-                  ListTile(
-                    leading: const Icon(Icons.fullscreen, color: Colors.blue),
-                    title: const Text('View Full Photo'),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      _showFullImageDialog(
-                        context,
-                        product.imageUrl!,
-                        product.name,
-                      );
-                    },
-                  ),
-                ListTile(
-                  leading: const Icon(Icons.delete_outline, color: Colors.red),
-                  title: const Text(
-                    'Delete Product',
-                    style: TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  subtitle: const Text('Permanently remove this product catalog'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _confirmDeleteProduct(product);
-                  },
-                ),
-              ],
-            ),
-          ),
         );
       },
     );
@@ -996,7 +658,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Add fabrication products with descriptions, pictures, and required process stages.',
+                            'Add fabrication products with descriptions, multiple photos, and required process stages.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 14,
@@ -1027,6 +689,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   itemCount: products.length,
                   itemBuilder: (context, index) {
                     final product = products[index];
+                    final firstImageUrl = product.imageUrl;
+                    final photoCount = product.imageUrls.length;
 
                     return Card(
                       elevation: 1.5,
@@ -1042,11 +706,17 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       ),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
-                        onTap: () => _showProductOptionsModal(
-                          context: context,
-                          product: product,
-                          availableStages: availableStages,
-                        ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ProductDetailScreen(
+                                productId: product.id,
+                                initialProduct: product,
+                              ),
+                            ),
+                          );
+                        },
                         child: Padding(
                           padding: const EdgeInsets.all(14.0),
                           child: Column(
@@ -1055,61 +725,82 @@ class _ProductsScreenState extends State<ProductsScreen> {
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Product Photo Thumbnail with zoom on tap
-                                  GestureDetector(
-                                    onTap: () {
-                                      if (product.imageUrl != null &&
-                                          product.imageUrl!.isNotEmpty) {
-                                        _showFullImageDialog(
-                                          context,
-                                          product.imageUrl!,
-                                          product.name,
-                                        );
-                                      }
-                                    },
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Container(
-                                        width: 76,
-                                        height: 76,
-                                        decoration: BoxDecoration(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                              .withValues(alpha: 0.08),
-                                          border: Border.all(
+                                  // Product Photo Thumbnail with photo count badge
+                                  Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          width: 76,
+                                          height: 76,
+                                          decoration: BoxDecoration(
                                             color: Theme.of(context)
                                                 .colorScheme
                                                 .primary
-                                                .withValues(alpha: 0.2),
+                                                .withValues(alpha: 0.08),
+                                            border: Border.all(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .primary
+                                                  .withValues(alpha: 0.2),
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                        child: product.imageUrl != null &&
-                                                product.imageUrl!.isNotEmpty
-                                            ? Image.network(
-                                                product.imageUrl!,
-                                                fit: BoxFit.cover,
-                                                errorBuilder: (context, error,
-                                                        stackTrace) =>
-                                                    Icon(
+                                          child: firstImageUrl != null &&
+                                                  firstImageUrl.isNotEmpty
+                                              ? Image.network(
+                                                  firstImageUrl,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (context, error,
+                                                          stackTrace) =>
+                                                      Icon(
+                                                    Icons.inventory_2_outlined,
+                                                    size: 36,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .primary,
+                                                  ),
+                                                )
+                                              : Icon(
                                                   Icons.inventory_2_outlined,
                                                   size: 36,
                                                   color: Theme.of(context)
                                                       .colorScheme
                                                       .primary,
                                                 ),
-                                              )
-                                            : Icon(
-                                                Icons.inventory_2_outlined,
-                                                size: 36,
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .primary,
-                                              ),
+                                        ),
                                       ),
-                                    ),
+                                      if (photoCount > 1)
+                                        Positioned(
+                                          bottom: 4,
+                                          right: 4,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withValues(alpha: 0.7),
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.photo_library,
+                                                    size: 10, color: Colors.white),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  '$photoCount',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                   const SizedBox(width: 14),
 
@@ -1148,30 +839,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                     ),
                                   ),
 
-                                  // Actions (Edit & Delete)
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.edit_outlined),
-                                        tooltip: 'Edit Product',
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                        onPressed: () =>
-                                            _showAddOrEditProductDialog(
-                                          existingProduct: product,
-                                          availableStages: availableStages,
-                                        ),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete_outline),
-                                        tooltip: 'Delete Product',
-                                        color: Colors.red[400],
-                                        onPressed: () =>
-                                            _confirmDeleteProduct(product),
-                                      ),
-                                    ],
+                                  // Chevron for navigation indicator
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8.0),
+                                    child: Icon(
+                                      Icons.chevron_right,
+                                      color: Colors.grey[400],
+                                    ),
                                   ),
                                 ],
                               ),

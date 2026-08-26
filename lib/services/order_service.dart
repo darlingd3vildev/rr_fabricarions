@@ -38,7 +38,7 @@ class OrderService {
     });
   }
 
-  Future<void> addOrder({
+  Future<String> addOrder({
     required String productId,
     required String productName,
     required String description,
@@ -46,6 +46,9 @@ class OrderService {
     OrderStatus status = OrderStatus.pending,
     int completionPercentage = 0,
     List<OrderStageModel>? stages,
+    String? customerName,
+    String? customerPhone,
+    String? enquiryId,
   }) async {
     try {
       List<OrderStageModel> initialStages = stages ?? [];
@@ -55,7 +58,7 @@ class OrderService {
         initialStages = await _loadStagesForProduct(productId);
       }
 
-      await _ordersCollection.add({
+      final docRef = await _ordersCollection.add({
         'productId': productId.trim(),
         'productName': productName.trim(),
         'description': description.trim(),
@@ -63,8 +66,13 @@ class OrderService {
         'status': status.name,
         'completionPercentage': completionPercentage.clamp(0, 100),
         'stages': initialStages.map((s) => s.toMap()).toList(),
+        'customerName': customerName?.trim(),
+        'customerPhone': customerPhone?.trim(),
+        'enquiryId': enquiryId?.trim(),
         'createdAt': FieldValue.serverTimestamp(),
       });
+
+      return docRef.id;
     } catch (e) {
       debugPrint('Error adding order: $e');
       rethrow;
@@ -78,7 +86,8 @@ class OrderService {
       if (!productDoc.exists) return [];
 
       final data = productDoc.data() ?? {};
-      final stageIds = (data['stageIds'] as List?)?.map((e) => e.toString()).toList() ?? [];
+      final stageIds =
+          (data['stageIds'] as List?)?.map((e) => e.toString()).toList() ?? [];
 
       if (stageIds.isEmpty) return [];
 
@@ -102,12 +111,16 @@ class OrderService {
     }
   }
 
-  Future<void> syncOrderStagesFromProduct(String orderId, String productId) async {
+  Future<void> syncOrderStagesFromProduct(
+      String orderId, String productId) async {
     try {
       final stages = await _loadStagesForProduct(productId);
       if (stages.isNotEmpty) {
         await _ordersCollection.doc(orderId).update({
           'stages': stages.map((s) => s.toMap()).toList(),
+          'completionPercentage': 0,
+          'status': OrderStatus.inProgress.name,
+          'updatedAt': FieldValue.serverTimestamp(),
         });
       }
     } catch (e) {
@@ -209,6 +222,53 @@ class OrderService {
       });
     } catch (e) {
       debugPrint('Error updating stage status: $e');
+      rethrow;
+    }
+  }
+
+  /// Updates only the basic details of an order without overriding stages
+  Future<void> updateOrderBasicDetails({
+    required String id,
+    required String productId,
+    required String productName,
+    required String description,
+    required String dimensions,
+    required OrderStatus status,
+  }) async {
+    try {
+      await _ordersCollection.doc(id).update({
+        'productId': productId.trim(),
+        'productName': productName.trim(),
+        'description': description.trim(),
+        'dimensions': dimensions.trim(),
+        'status': status.name,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Error updating order basic details: $e');
+      rethrow;
+    }
+  }
+
+  /// Updates the stages pipeline of an order independently
+  Future<void> updateOrderStages({
+    required String orderId,
+    required List<OrderStageModel> stages,
+  }) async {
+    try {
+      final completedCount =
+          stages.where((s) => s.status == OrderStageStatus.completed).length;
+      final newPercentage = stages.isNotEmpty
+          ? ((completedCount / stages.length) * 100).round()
+          : 0;
+
+      await _ordersCollection.doc(orderId).update({
+        'stages': stages.map((s) => s.toMap()).toList(),
+        'completionPercentage': newPercentage,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Error updating order stages: $e');
       rethrow;
     }
   }

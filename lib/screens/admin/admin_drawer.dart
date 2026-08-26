@@ -7,8 +7,8 @@ enum AdminScreen {
   users,
   products,
   orders,
-  workers,
   stages,
+  enquiries,
 }
 
 class AdminDrawer extends StatelessWidget {
@@ -31,8 +31,8 @@ class AdminDrawer extends StatelessWidget {
         return DrawerItem.adminStages;
       case AdminScreen.orders:
         return DrawerItem.adminOrders;
-      case AdminScreen.workers:
-        return DrawerItem.adminWorkers;
+      case AdminScreen.enquiries:
+        return DrawerItem.enquiries;
     }
   }
 

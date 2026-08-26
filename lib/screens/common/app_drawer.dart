@@ -7,8 +7,10 @@ import 'package:rr_fabrication/screens/admin/orders_screen.dart';
 import 'package:rr_fabrication/screens/admin/products_screen.dart';
 import 'package:rr_fabrication/screens/admin/stages_screen.dart';
 import 'package:rr_fabrication/screens/admin/users_screen.dart';
-import 'package:rr_fabrication/screens/admin/workers_screen.dart';
+import 'package:rr_fabrication/screens/attendance/attendance_screen.dart';
 import 'package:rr_fabrication/screens/customer/home_screen.dart';
+import 'package:rr_fabrication/screens/marketing/enquiries_screen.dart';
+import 'package:rr_fabrication/screens/marketing/marketing_home_screen.dart';
 import 'package:rr_fabrication/screens/worker/worker_home_screen.dart';
 import 'package:rr_fabrication/services/auth_service.dart';
 
@@ -18,9 +20,11 @@ enum DrawerItem {
   adminProducts,
   adminStages,
   adminOrders,
-  adminWorkers,
+  enquiries,
+  attendance,
   customerHome,
   workerHome,
+  marketingHome,
 }
 
 class AppDrawer extends StatefulWidget {
@@ -73,10 +77,7 @@ class _AppDrawerState extends State<AppDrawer> {
           }
           final roleString = data['role'] as String?;
           if (roleString != null) {
-            _role = UserRole.values.firstWhere(
-              (r) => r.name == roleString,
-              orElse: () => widget.userRole ?? UserRole.CUSTOMER,
-            );
+            _role = UserRole.fromString(roleString);
           }
           setState(() {});
         }
@@ -142,7 +143,6 @@ class _AppDrawerState extends State<AppDrawer> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // User Initial Circle (future image support)
                 CircleAvatar(
                   radius: 28,
                   backgroundColor: Colors.white,
@@ -156,7 +156,6 @@ class _AppDrawerState extends State<AppDrawer> {
                   ),
                 ),
                 const SizedBox(width: 14),
-                // Beside it: User Name, Role/Email, and Sign Out Button Below
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -196,7 +195,7 @@ class _AppDrawerState extends State<AppDrawer> {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            effectiveRole.name,
+                            effectiveRole.displayName,
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 10,
@@ -207,7 +206,6 @@ class _AppDrawerState extends State<AppDrawer> {
                         ),
                       ],
                       const SizedBox(height: 8),
-                      // Sign Out button directly below name
                       InkWell(
                         borderRadius: BorderRadius.circular(6),
                         onTap: () => _signOut(context),
@@ -301,24 +299,24 @@ class _AppDrawerState extends State<AppDrawer> {
                   ),
                   _buildDrawerTile(
                     context: context,
+                    icon: Icons.support_agent_outlined,
+                    title: 'Enquiries & Leads',
+                    item: DrawerItem.enquiries,
+                    onTap: () => _navigateTo(
+                      context,
+                      DrawerItem.enquiries,
+                      const EnquiriesScreen(userRole: UserRole.ADMIN),
+                    ),
+                  ),
+                  _buildDrawerTile(
+                    context: context,
                     icon: Icons.people_alt_outlined,
-                    title: 'Users',
+                    title: 'Users & Roles',
                     item: DrawerItem.adminUsers,
                     onTap: () => _navigateTo(
                       context,
                       DrawerItem.adminUsers,
                       const UsersScreen(),
-                    ),
-                  ),
-                  _buildDrawerTile(
-                    context: context,
-                    icon: Icons.engineering_outlined,
-                    title: 'Workers',
-                    item: DrawerItem.adminWorkers,
-                    onTap: () => _navigateTo(
-                      context,
-                      DrawerItem.adminWorkers,
-                      const WorkersScreen(),
                     ),
                   ),
                   const Divider(height: 20),
@@ -345,6 +343,54 @@ class _AppDrawerState extends State<AppDrawer> {
                       WorkerHomeScreen(userRole: effectiveRole),
                     ),
                   ),
+                  _buildDrawerTile(
+                    context: context,
+                    icon: Icons.trending_up,
+                    title: 'Marketing View',
+                    item: DrawerItem.marketingHome,
+                    onTap: () => _navigateTo(
+                      context,
+                      DrawerItem.marketingHome,
+                      const MarketingHomeScreen(userRole: UserRole.MARKETING),
+                    ),
+                  ),
+                ] else if (effectiveRole == UserRole.ATTENDANCE) ...[
+                  _buildSectionHeader('ATTENDANCE PANEL'),
+                  _buildDrawerTile(
+                    context: context,
+                    icon: Icons.fingerprint,
+                    title: 'Attendance Kiosk',
+                    item: DrawerItem.attendance,
+                    onTap: () => _navigateTo(
+                      context,
+                      DrawerItem.attendance,
+                      const AttendanceScreen(userRole: UserRole.ATTENDANCE),
+                    ),
+                  ),
+                ] else if (effectiveRole == UserRole.MARKETING) ...[
+                  _buildSectionHeader('MARKETING PANEL'),
+                  _buildDrawerTile(
+                    context: context,
+                    icon: Icons.dashboard_outlined,
+                    title: 'Marketing Dashboard',
+                    item: DrawerItem.marketingHome,
+                    onTap: () => _navigateTo(
+                      context,
+                      DrawerItem.marketingHome,
+                      const MarketingHomeScreen(userRole: UserRole.MARKETING),
+                    ),
+                  ),
+                  _buildDrawerTile(
+                    context: context,
+                    icon: Icons.support_agent_outlined,
+                    title: 'Customer Enquiries',
+                    item: DrawerItem.enquiries,
+                    onTap: () => _navigateTo(
+                      context,
+                      DrawerItem.enquiries,
+                      const EnquiriesScreen(userRole: UserRole.MARKETING),
+                    ),
+                  ),
                 ] else if (effectiveRole == UserRole.WORKER) ...[
                   _buildSectionHeader('WORKER PANEL'),
                   _buildDrawerTile(
@@ -356,19 +402,6 @@ class _AppDrawerState extends State<AppDrawer> {
                       context,
                       DrawerItem.workerHome,
                       WorkerHomeScreen(userRole: effectiveRole),
-                    ),
-                  ),
-                  const Divider(height: 20),
-                  _buildSectionHeader('SWITCH VIEWS'),
-                  _buildDrawerTile(
-                    context: context,
-                    icon: Icons.storefront_outlined,
-                    title: 'Customer View',
-                    item: DrawerItem.customerHome,
-                    onTap: () => _navigateTo(
-                      context,
-                      DrawerItem.customerHome,
-                      HomePage(userRole: effectiveRole),
                     ),
                   ),
                 ] else ...[

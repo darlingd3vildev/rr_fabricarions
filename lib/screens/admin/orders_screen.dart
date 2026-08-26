@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:rr_fabrication/models/order_model.dart';
-import 'package:rr_fabrication/models/order_stage_model.dart';
 import 'package:rr_fabrication/models/product_model.dart';
 import 'package:rr_fabrication/screens/admin/admin_drawer.dart';
 import 'package:rr_fabrication/screens/admin/order_detail_screen.dart';
@@ -19,6 +18,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
   final ProductService _productService = ProductService();
 
   OrderStatus? _selectedStatusFilter;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   Color _getStatusColor(OrderStatus status) {
     switch (status) {
@@ -46,31 +53,19 @@ class _OrdersScreenState extends State<OrdersScreen> {
     }
   }
 
-  void _showAddOrEditOrderDialog({
-    OrderModel? existingOrder,
+  void _showAddOrderDialog({
     required List<ProductModel> availableProducts,
   }) {
-    final isEditing = existingOrder != null;
     final formKey = GlobalKey<FormState>();
     final messenger = ScaffoldMessenger.of(context);
 
-    String? selectedProductId = isEditing ? existingOrder.productId : null;
-    String selectedProductName = isEditing ? existingOrder.productName : '';
+    String? selectedProductId =
+        availableProducts.isNotEmpty ? availableProducts.first.id : null;
+    String selectedProductName =
+        availableProducts.isNotEmpty ? availableProducts.first.name : '';
 
-    // If creating and products exist, default to the first product
-    if (!isEditing && availableProducts.isNotEmpty) {
-      selectedProductId = availableProducts.first.id;
-      selectedProductName = availableProducts.first.name;
-    }
-
-    final dimensionsController =
-        TextEditingController(text: isEditing ? existingOrder.dimensions : '');
-    final descriptionController =
-        TextEditingController(text: isEditing ? existingOrder.description : '');
-    OrderStatus selectedStatus =
-        isEditing ? existingOrder.status : OrderStatus.pending;
-    double completionPercentage =
-        isEditing ? existingOrder.completionPercentage.toDouble() : 0.0;
+    final dimensionsController = TextEditingController();
+    final descriptionController = TextEditingController();
 
     showDialog(
       context: context,
@@ -87,11 +82,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
               title: Row(
                 children: [
                   Icon(
-                    isEditing ? Icons.edit_note : Icons.add_shopping_cart,
+                    Icons.add_shopping_cart,
                     color: Theme.of(context).colorScheme.primary,
                   ),
                   const SizedBox(width: 8),
-                  Text(isEditing ? 'Edit Order' : 'Create New Order'),
+                  const Text('Create New Order'),
                 ],
               ),
               content: SizedBox(
@@ -103,7 +98,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Product Selection Dropdown
                         if (availableProducts.isEmpty)
                           Container(
                             padding: const EdgeInsets.all(12),
@@ -157,21 +151,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                 });
                               }
                             },
-                            validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return 'Please select a product';
-                              }
-                              return null;
-                            },
                           ),
                         const SizedBox(height: 16),
-
-                        // Dimensions
                         TextFormField(
                           controller: dimensionsController,
                           decoration: InputDecoration(
                             labelText: 'Dimensions *',
-                            hintText: 'e.g., 6ft x 4ft, 1500mm x 900mm',
+                            hintText: 'e.g., 10x12 ft, 50 running feet',
                             prefixIcon: const Icon(Icons.straighten),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
@@ -179,127 +165,25 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
-                              return 'Please enter dimensions';
+                              return 'Please enter order dimensions';
                             }
                             return null;
                           },
                         ),
                         const SizedBox(height: 16),
-
-                        // Description / Notes
                         TextFormField(
                           controller: descriptionController,
                           maxLines: 3,
                           decoration: InputDecoration(
-                            labelText: 'Description / Notes',
-                            hintText:
-                                'Custom client requirements, material grades...',
-                            prefixIcon: const Icon(Icons.description_outlined),
+                            labelText: 'Description / Client Notes',
+                            hintText: 'Specifications or instructions...',
+                            prefixIcon:
+                                const Icon(Icons.description_outlined),
                             alignLabelWithHint: true,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Status Dropdown
-                        DropdownButtonFormField<OrderStatus>(
-                          initialValue: selectedStatus,
-                          decoration: InputDecoration(
-                            labelText: 'Order Status',
-                            prefixIcon: const Icon(Icons.flag_outlined),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          items: OrderStatus.values.map((status) {
-                            return DropdownMenuItem<OrderStatus>(
-                              value: status,
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      color: _getStatusColor(status),
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(status.displayName),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (newStatus) {
-                            if (newStatus != null) {
-                              setDialogState(() {
-                                selectedStatus = newStatus;
-                                if (newStatus == OrderStatus.completed) {
-                                  completionPercentage = 100.0;
-                                } else if (newStatus == OrderStatus.pending &&
-                                    completionPercentage == 100.0) {
-                                  completionPercentage = 0.0;
-                                }
-                              });
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Completion Percentage Slider
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Completion Progress:',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                '${completionPercentage.round()}%',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Theme.of(context).colorScheme.primary,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Slider(
-                          value: completionPercentage,
-                          min: 0,
-                          max: 100,
-                          divisions: 20, // Step by 5%
-                          label: '${completionPercentage.round()}%',
-                          onChanged: (value) {
-                            setDialogState(() {
-                              completionPercentage = value;
-                              if (value == 100.0) {
-                                selectedStatus = OrderStatus.completed;
-                              } else if (value > 0 &&
-                                  selectedStatus == OrderStatus.pending) {
-                                selectedStatus = OrderStatus.inProgress;
-                              }
-                            });
-                          },
                         ),
                       ],
                     ),
@@ -319,69 +203,43 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       : () async {
                           if (!formKey.currentState!.validate()) return;
                           if (selectedProductId == null ||
-                              selectedProductId!.isEmpty) {
+                              selectedProductName.isEmpty) {
                             messenger.showSnackBar(
                               const SnackBar(
                                 content: Text('Please select a product'),
-                                backgroundColor: Colors.orange,
+                                backgroundColor: Colors.red,
                               ),
                             );
                             return;
                           }
 
-                          setDialogState(() {
-                            isSubmitting = true;
-                          });
+                          setDialogState(() => isSubmitting = true);
 
                           try {
-                            if (isEditing) {
-                              await _orderService.updateOrder(
-                                id: existingOrder.id,
-                                productId: selectedProductId!,
-                                productName: selectedProductName,
-                                description: descriptionController.text,
-                                dimensions: dimensionsController.text,
-                                status: selectedStatus,
-                                completionPercentage:
-                                    completionPercentage.round(),
-                              );
-                              messenger.showSnackBar(
-                                const SnackBar(
-                                  content: Text('Order updated successfully'),
-                                  backgroundColor: Colors.green,
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                            } else {
-                              await _orderService.addOrder(
-                                productId: selectedProductId!,
-                                productName: selectedProductName,
-                                description: descriptionController.text,
-                                dimensions: dimensionsController.text,
-                                status: selectedStatus,
-                                completionPercentage:
-                                    completionPercentage.round(),
-                              );
-                              messenger.showSnackBar(
-                                const SnackBar(
-                                  content: Text('Order created successfully'),
-                                  backgroundColor: Colors.green,
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                            }
+                            await _orderService.addOrder(
+                              productId: selectedProductId!,
+                              productName: selectedProductName,
+                              description: descriptionController.text,
+                              dimensions: dimensionsController.text,
+                            );
+
                             if (dialogContext.mounted) {
                               Navigator.of(dialogContext).pop();
                             }
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Order created successfully'),
+                                backgroundColor: Colors.green,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
                           } catch (e) {
                             if (dialogContext.mounted) {
-                              setDialogState(() {
-                                isSubmitting = false;
-                              });
+                              setDialogState(() => isSubmitting = false);
                             }
                             messenger.showSnackBar(
                               SnackBar(
-                                content: Text('Failed to save order: $e'),
+                                content: Text('Failed to create order: $e'),
                                 backgroundColor: Colors.red,
                                 behavior: SnackBarBehavior.floating,
                               ),
@@ -397,12 +255,237 @@ class _OrdersScreenState extends State<OrdersScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : Icon(isEditing ? Icons.save : Icons.add),
+                      : const Icon(Icons.add_shopping_cart),
                   label: Text(
-                    isSubmitting
-                        ? 'Saving...'
-                        : (isEditing ? 'Save Changes' : 'Create Order'),
+                      isSubmitting ? 'Creating Order...' : 'Create Order'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showEditOrderBasicDetailsDialog({
+    required OrderModel existingOrder,
+    required List<ProductModel> availableProducts,
+  }) {
+    final formKey = GlobalKey<FormState>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    String? selectedProductId = existingOrder.productId;
+    String selectedProductName = existingOrder.productName;
+
+    final dimensionsController =
+        TextEditingController(text: existingOrder.dimensions);
+    final descriptionController =
+        TextEditingController(text: existingOrder.description);
+    OrderStatus selectedStatus = existingOrder.status;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        bool isSubmitting = false;
+
+        return StatefulBuilder(
+          builder: (builderContext, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Row(
+                children: [
+                  Icon(
+                    Icons.edit_note,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
+                  const SizedBox(width: 8),
+                  const Text('Edit Order Basic Details'),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                child: Form(
+                  key: formKey,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Note: Editing basic details will preserve all assigned workers and completed stage progress.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        // Product Dropdown
+                        DropdownButtonFormField<String>(
+                          initialValue:
+                              selectedProductId?.isNotEmpty == true
+                                  ? selectedProductId
+                                  : null,
+                          decoration: InputDecoration(
+                            labelText: 'Product *',
+                            prefixIcon:
+                                const Icon(Icons.inventory_2_outlined),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          items: [
+                            if (!availableProducts
+                                .any((p) => p.id == selectedProductId))
+                              DropdownMenuItem<String>(
+                                value: selectedProductId,
+                                child: Text(selectedProductName),
+                              ),
+                            ...availableProducts.map((product) {
+                              return DropdownMenuItem<String>(
+                                value: product.id,
+                                child: Text(
+                                  product.name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              setDialogState(() {
+                                selectedProductId = value;
+                                final match = availableProducts
+                                    .where((p) => p.id == value);
+                                if (match.isNotEmpty) {
+                                  selectedProductName = match.first.name;
+                                }
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: dimensionsController,
+                          decoration: InputDecoration(
+                            labelText: 'Dimensions *',
+                            hintText: 'e.g., 10x12 ft',
+                            prefixIcon: const Icon(Icons.straighten),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Please enter dimensions';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: descriptionController,
+                          maxLines: 3,
+                          decoration: InputDecoration(
+                            labelText: 'Description / Notes',
+                            prefixIcon:
+                                const Icon(Icons.description_outlined),
+                            alignLabelWithHint: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<OrderStatus>(
+                          initialValue: selectedStatus,
+                          decoration: InputDecoration(
+                            labelText: 'Order Status',
+                            prefixIcon: const Icon(Icons.flag_outlined),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          items: OrderStatus.values.map((status) {
+                            return DropdownMenuItem<OrderStatus>(
+                              value: status,
+                              child: Text(status.displayName),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setDialogState(() => selectedStatus = value);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          if (!formKey.currentState!.validate()) return;
+
+                          setDialogState(() => isSubmitting = true);
+
+                          try {
+                            await _orderService.updateOrderBasicDetails(
+                              id: existingOrder.id,
+                              productId: selectedProductId ?? '',
+                              productName: selectedProductName,
+                              description: descriptionController.text,
+                              dimensions: dimensionsController.text,
+                              status: selectedStatus,
+                            );
+
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Order details updated'),
+                                backgroundColor: Colors.green,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          } catch (e) {
+                            if (dialogContext.mounted) {
+                              setDialogState(() => isSubmitting = false);
+                            }
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content:
+                                    Text('Failed to update order: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                  icon: isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.save),
+                  label: Text(
+                      isSubmitting ? 'Saving...' : 'Save Details'),
                 ),
               ],
             );
@@ -417,88 +500,56 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
     showDialog(
       context: context,
-      barrierDismissible: false,
       builder: (dialogContext) {
-        bool isDeleting = false;
-
-        return StatefulBuilder(
-          builder: (builderContext, setDialogState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Delete Order'),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to delete order for "${order.productName}"?\nThis will remove all associated stages and progress.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
               ),
-              title: const Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text('Delete Order'),
-                ],
-              ),
-              content: Text(
-                'Are you sure you want to delete order for "${order.productName}" (${order.dimensions})?\nThis action cannot be undone.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isDeleting
-                      ? null
-                      : () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: isDeleting
-                      ? null
-                      : () async {
-                          setDialogState(() {
-                            isDeleting = true;
-                          });
-
-                          try {
-                            await _orderService.deleteOrder(order.id);
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    'Order for "${order.productName}" deleted'),
-                                backgroundColor: Colors.red[700],
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                            if (dialogContext.mounted) {
-                              Navigator.of(dialogContext).pop();
-                            }
-                          } catch (e) {
-                            if (dialogContext.mounted) {
-                              setDialogState(() {
-                                isDeleting = false;
-                              });
-                            }
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text('Failed to delete order: $e'),
-                                backgroundColor: Colors.red,
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        },
-                  icon: isDeleting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.delete_forever),
-                  label: Text(isDeleting ? 'Deleting...' : 'Delete'),
-                ),
-              ],
-            );
-          },
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                try {
+                  await _orderService.deleteOrder(order.id);
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content:
+                          Text('Order for "${order.productName}" deleted'),
+                      backgroundColor: Colors.red[700],
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to delete order: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.delete_forever),
+              label: const Text('Delete'),
+            ),
+          ],
         );
       },
     );
@@ -510,16 +561,28 @@ class _OrdersScreenState extends State<OrdersScreen> {
       stream: _productService.getProductsStream(),
       builder: (context, productsSnapshot) {
         final availableProducts = productsSnapshot.data ?? [];
+        final productMap = {for (var p in availableProducts) p.id: p};
 
         return StreamBuilder<List<OrderModel>>(
           stream: _orderService.getOrdersStream(),
           builder: (context, snapshot) {
             final allOrders = snapshot.data ?? [];
-            final filteredOrders = _selectedStatusFilter == null
-                ? allOrders
-                : allOrders
-                    .where((o) => o.status == _selectedStatusFilter)
-                    .toList();
+
+            var filteredOrders = allOrders;
+            if (_selectedStatusFilter != null) {
+              filteredOrders = filteredOrders
+                  .where((o) => o.status == _selectedStatusFilter)
+                  .toList();
+            }
+
+            if (_searchQuery.trim().isNotEmpty) {
+              final q = _searchQuery.trim().toLowerCase();
+              filteredOrders = filteredOrders.where((o) {
+                return o.productName.toLowerCase().contains(q) ||
+                    o.dimensions.toLowerCase().contains(q) ||
+                    o.description.toLowerCase().contains(q);
+              }).toList();
+            }
 
             final hasOrders = allOrders.isNotEmpty;
 
@@ -530,7 +593,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
               ),
               floatingActionButton: hasOrders
                   ? FloatingActionButton.extended(
-                      onPressed: () => _showAddOrEditOrderDialog(
+                      onPressed: () => _showAddOrderDialog(
                         availableProducts: availableProducts,
                       ),
                       icon: const Icon(Icons.add),
@@ -543,63 +606,26 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 }
 
                 if (snapshot.hasError) {
-                  debugPrint('Error loading orders: ${snapshot.error}');
                   return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            color: Colors.red,
-                            size: 48,
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Failed to load orders',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '${snapshot.error}',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey[700]),
-                          ),
-                        ],
-                      ),
-                    ),
+                    child: Text('Failed to load orders: ${snapshot.error}'),
                   );
                 }
 
-                if (allOrders.isEmpty) {
+                if (!hasOrders) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(32.0),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .primary
-                                  .withValues(alpha: 0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.shopping_cart_outlined,
-                              size: 64,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
+                          Icon(
+                            Icons.shopping_cart_outlined,
+                            size: 64,
+                            color: Theme.of(context).colorScheme.primary,
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 16),
                           const Text(
-                            'No Orders Created Yet',
+                            'No Orders Yet',
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -607,7 +633,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Create fabrication orders with product details, dimensions, status, and track progress.',
+                            'Create fabrication orders to track progress across sequential process stages.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 14,
@@ -616,11 +642,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           ),
                           const SizedBox(height: 24),
                           ElevatedButton.icon(
-                            onPressed: () => _showAddOrEditOrderDialog(
+                            onPressed: () => _showAddOrderDialog(
                               availableProducts: availableProducts,
                             ),
                             icon: const Icon(Icons.add),
-                            label: const Text('Add First Order'),
+                            label: const Text('Create First Order'),
                           ),
                         ],
                       ),
@@ -630,67 +656,87 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
                 return Column(
                   children: [
-                    // Status Filter Chips
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            FilterChip(
-                              label: Text('All (${allOrders.length})'),
-                              selected: _selectedStatusFilter == null,
-                              onSelected: (_) {
-                                setState(() {
-                                  _selectedStatusFilter = null;
-                                });
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                            ...OrderStatus.values.map((status) {
-                              final count = allOrders
-                                  .where((o) => o.status == status)
-                                  .length;
-                              final isSelected =
-                                  _selectedStatusFilter == status;
-
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8.0),
-                                child: FilterChip(
-                                  label: Text(
-                                    '${status.displayName} ($count)',
-                                  ),
-                                  selected: isSelected,
-                                  selectedColor: _getStatusBackgroundColor(status),
-                                  checkmarkColor: _getStatusColor(status),
-                                  onSelected: (_) {
-                                    setState(() {
-                                      _selectedStatusFilter =
-                                          isSelected ? null : status;
-                                    });
+                    // Search & Filters
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search orders by product or size...',
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() => _searchQuery = '');
                                   },
-                                ),
-                              );
-                            }),
-                          ],
+                                )
+                              : null,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
+                        onChanged: (val) {
+                          setState(() => _searchQuery = val);
+                        },
+                      ),
+                    ),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 6),
+                      child: Row(
+                        children: [
+                          FilterChip(
+                            label: const Text('All Orders'),
+                            selected: _selectedStatusFilter == null,
+                            onSelected: (selected) {
+                              setState(() => _selectedStatusFilter = null);
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          ...OrderStatus.values.map((status) {
+                            final isSelected =
+                                _selectedStatusFilter == status;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: FilterChip(
+                                label: Text(status.displayName),
+                                selected: isSelected,
+                                selectedColor: _getStatusBackgroundColor(status),
+                                labelStyle: TextStyle(
+                                  color: isSelected
+                                      ? _getStatusColor(status)
+                                      : null,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                                onSelected: (selected) {
+                                  setState(() {
+                                    _selectedStatusFilter =
+                                        selected ? status : null;
+                                  });
+                                },
+                              ),
+                            );
+                          }),
+                        ],
                       ),
                     ),
                     const Divider(height: 1),
 
-                    // Orders List
+                    // Order List
                     Expanded(
                       child: filteredOrders.isEmpty
                           ? Center(
                               child: Text(
-                                'No orders with status "${_selectedStatusFilter?.displayName}"',
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 14,
-                                ),
+                                'No orders matching current filter',
+                                style: TextStyle(color: Colors.grey[600]),
                               ),
                             )
                           : ListView.builder(
@@ -698,18 +744,21 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                 left: 16,
                                 right: 16,
                                 top: 12,
-                                bottom: 80, // Clearance for FAB
+                                bottom: 80,
                               ),
                               itemCount: filteredOrders.length,
                               itemBuilder: (context, index) {
                                 final order = filteredOrders[index];
-                                final statusColor = _getStatusColor(order.status);
+                                final statusColor =
+                                    _getStatusColor(order.status);
                                 final statusBgColor =
                                     _getStatusBackgroundColor(order.status);
+                                final product = productMap[order.productId];
+                                final productImageUrl = product?.imageUrl;
 
                                 return Card(
                                   elevation: 1.5,
-                                  margin: const EdgeInsets.only(bottom: 12),
+                                  margin: const EdgeInsets.only(bottom: 14),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(14),
                                     side: BorderSide(
@@ -719,262 +768,181 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                           .withValues(alpha: 0.15),
                                     ),
                                   ),
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(14),
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              OrderDetailScreen(
-                                            orderId: order.id,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(14.0),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          // Header Row: Product Thumbnail, Name & Status Badge
-                                          Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              () {
-                                                final match = availableProducts
-                                                    .where((p) =>
-                                                        p.id == order.productId)
-                                                    .toList();
-                                                final img = match.isNotEmpty
-                                                    ? match.first.imageUrl
-                                                    : null;
-                                                if (img != null &&
-                                                    img.isNotEmpty) {
-                                                  return Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                            right: 12.0),
-                                                    child: ClipRRect(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              10),
-                                                      child: Container(
-                                                        width: 52,
-                                                        height: 52,
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          border: Border.all(
-                                                            color: Theme.of(
-                                                                    context)
-                                                                .colorScheme
-                                                                .primary
-                                                                .withValues(
-                                                                    alpha:
-                                                                        0.15),
-                                                          ),
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(10),
-                                                        ),
-                                                        child: Image.network(
-                                                          img,
-                                                          fit: BoxFit.cover,
-                                                          errorBuilder:
-                                                              (c, e, s) => Icon(
-                                                            Icons
-                                                                .inventory_2_outlined,
-                                                            size: 26,
-                                                            color: Theme.of(
-                                                                    context)
-                                                                .colorScheme
-                                                                .primary,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  );
-                                                }
-                                                return const SizedBox.shrink();
-                                              }(),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      order.productName,
-                                                      style: const TextStyle(
-                                                        fontSize: 17,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 4),
-                                                    // Dimensions Chip
-                                                    Row(
-                                                      children: [
-                                                        Icon(
-                                                          Icons.straighten,
-                                                          size: 14,
-                                                          color: Colors.grey[600],
-                                                        ),
-                                                        const SizedBox(width: 4),
-                                                        Text(
-                                                          order.dimensions,
-                                                          style: TextStyle(
-                                                            fontSize: 13,
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                            color: Colors.grey[800],
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ],
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(14.0),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            if (productImageUrl != null &&
+                                                productImageUrl.isNotEmpty)
+                                              ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                                child: Image.network(
+                                                  productImageUrl,
+                                                  width: 50,
+                                                  height: 50,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (c, e, s) =>
+                                                      const SizedBox.shrink(),
                                                 ),
                                               ),
-
-                                              // Status Badge
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 10,
-                                                  vertical: 5,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: statusBgColor,
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                  border: Border.all(
-                                                    color: statusColor
-                                                        .withValues(alpha: 0.4),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    order.productName,
+                                                    style: const TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
                                                   ),
-                                                ),
-                                                child: Text(
-                                                  order.status.displayName,
-                                                  style: TextStyle(
-                                                    color: statusColor,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 12,
+                                                  const SizedBox(height: 2),
+                                                  Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.straighten,
+                                                        size: 13,
+                                                        color: Colors.grey[600],
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        order.dimensions,
+                                                        style: TextStyle(
+                                                          fontSize: 13,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color:
+                                                              Colors.grey[800],
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
+                                                ],
+                                              ),
+                                            ),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 4,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: statusBgColor,
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                border: Border.all(
+                                                  color: statusColor
+                                                      .withValues(alpha: 0.4),
                                                 ),
                                               ),
-                                            ],
-                                          ),
-
-                                          if (order
-                                              .description.isNotEmpty) ...[
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              order.description,
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.grey[700],
+                                              child: Text(
+                                                order.status.displayName,
+                                                style: TextStyle(
+                                                  color: statusColor,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 11,
+                                                ),
                                               ),
                                             ),
                                           ],
-
-                                          const SizedBox(height: 14),
-
-                                          // Completion Progress Bar
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text(
-                                                'Completion: ${order.completionPercentage}% (${order.stages.where((s) => s.status == OrderStageStatus.completed).length}/${order.stages.length} stages)',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.grey[800],
-                                                ),
-                                              ),
-                                              Text(
-                                                order.completionPercentage == 100
-                                                    ? 'Finished'
-                                                    : '${100 - order.completionPercentage}% remaining',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey[600],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
+                                        ),
+                                        if (order.description.isNotEmpty) ...[
                                           const SizedBox(height: 6),
-                                          ClipRRect(
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                            child: LinearProgressIndicator(
-                                              value:
-                                                  order.completionPercentage / 100.0,
-                                              minHeight: 8,
-                                              backgroundColor: Colors.grey[200],
-                                              valueColor:
-                                                  AlwaysStoppedAnimation<Color>(
-                                                order.completionPercentage == 100
-                                                    ? Colors.green
-                                                    : (order.completionPercentage >= 50
-                                                        ? Colors.blue
-                                                        : Colors.orange),
-                                              ),
+                                          Text(
+                                            order.description,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[700],
                                             ),
                                           ),
-
-                                          const SizedBox(height: 10),
-                                          // Actions Row
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.end,
-                                            children: [
-                                              TextButton.icon(
-                                                onPressed: () {
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) =>
-                                                          OrderDetailScreen(
-                                                        orderId: order.id,
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                                icon: const Icon(
-                                                    Icons.format_list_numbered,
-                                                    size: 16),
-                                                label: const Text('Process Stages'),
-                                              ),
-                                              const SizedBox(width: 4),
-                                              TextButton.icon(
-                                                onPressed: () =>
-                                                    _showAddOrEditOrderDialog(
-                                                  existingOrder: order,
-                                                  availableProducts:
-                                                      availableProducts,
-                                                ),
-                                                icon: const Icon(
-                                                    Icons.edit_outlined,
-                                                    size: 16),
-                                                label: const Text('Edit'),
-                                              ),
-                                              const SizedBox(width: 4),
-                                              TextButton.icon(
-                                                style: TextButton.styleFrom(
-                                                  foregroundColor: Colors.red[600],
-                                                ),
-                                                onPressed: () =>
-                                                    _confirmDeleteOrder(order),
-                                                icon: const Icon(
-                                                    Icons.delete_outline,
-                                                    size: 16),
-                                                label: const Text('Delete'),
-                                              ),
-                                            ],
-                                          ),
                                         ],
-                                      ),
+                                        const SizedBox(height: 10),
+                                        // Progress Bar
+                                        ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          child: LinearProgressIndicator(
+                                            value:
+                                                order.completionPercentage /
+                                                    100.0,
+                                            minHeight: 6,
+                                            backgroundColor: Colors.grey[200],
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                              order.completionPercentage == 100
+                                                  ? Colors.green
+                                                  : (order.completionPercentage >=
+                                                          50
+                                                      ? Colors.blue
+                                                      : Colors.orange),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 10),
+
+                                        // Actions Row: Separate Details vs Stages & Delete
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.end,
+                                          children: [
+                                            TextButton.icon(
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        OrderDetailScreen(
+                                                      orderId: order.id,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                              icon: const Icon(
+                                                  Icons.format_list_numbered,
+                                                  size: 15),
+                                              label: const Text(
+                                                  'Process Stages'),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            TextButton.icon(
+                                              onPressed: () =>
+                                                  _showEditOrderBasicDetailsDialog(
+                                                existingOrder: order,
+                                                availableProducts:
+                                                    availableProducts,
+                                              ),
+                                              icon: const Icon(
+                                                  Icons.edit_outlined,
+                                                  size: 15),
+                                              label:
+                                                  const Text('Edit Details'),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            TextButton.icon(
+                                              style: TextButton.styleFrom(
+                                                foregroundColor:
+                                                    Colors.red[600],
+                                              ),
+                                              onPressed: () =>
+                                                  _confirmDeleteOrder(order),
+                                              icon: const Icon(
+                                                  Icons.delete_outline,
+                                                  size: 15),
+                                              label: const Text('Delete'),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 );

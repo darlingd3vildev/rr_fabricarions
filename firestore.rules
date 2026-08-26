@@ -38,5 +38,15 @@ service cloud.firestore {
     match /orders/{orderId} {
       allow read, write: if isAuthenticated();
     }
+
+    // Enquiries Collection (Marketing & Admin)
+    match /enquiries/{enquiryId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Attendance Collection
+    match /attendance/{attendanceId} {
+      allow read, write: if isAuthenticated();
+    }
   }
 }

@@ -2,7 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:rr_fabrication/models/user_role.dart';
+import 'package:rr_fabrication/screens/admin/admin_home_screen.dart';
+import 'package:rr_fabrication/screens/attendance/attendance_screen.dart';
 import 'package:rr_fabrication/screens/customer/home_screen.dart';
+import 'package:rr_fabrication/screens/marketing/marketing_home_screen.dart';
 import 'package:rr_fabrication/screens/worker/worker_home_screen.dart';
 import 'login_screen.dart';
 
@@ -42,10 +45,7 @@ class AuthGate extends StatelessWidget {
               final userData =
                   userDocSnapshot.data!.data() as Map<String, dynamic>? ?? {};
               final roleString = userData['role'] as String? ?? 'CUSTOMER';
-              final userRole = UserRole.values.firstWhere(
-                (e) => e.name == roleString,
-                orElse: () => UserRole.CUSTOMER,
-              );
+              final userRole = UserRole.fromString(roleString);
 
               return _buildScreenForRole(userRole);
             },
@@ -61,9 +61,14 @@ class AuthGate extends StatelessWidget {
 
 Widget _buildScreenForRole(UserRole role) {
   switch (role) {
+    case UserRole.ADMIN:
+      return const AdminHomeScreen(userRole: UserRole.ADMIN);
     case UserRole.WORKER:
       return WorkerHomeScreen(userRole: role);
-    case UserRole.ADMIN:
+    case UserRole.MARKETING:
+      return MarketingHomeScreen(userRole: role);
+    case UserRole.ATTENDANCE:
+      return AttendanceScreen(userRole: role);
     case UserRole.CUSTOMER:
       return HomePage(userRole: role);
   }
